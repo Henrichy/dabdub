@@ -24,6 +24,7 @@ pub struct PayLinkData {
     pub expiration_ledger: u32,
     /// Reserved for single-payment enforcement when claiming or settling a PayLink.
     pub paid: bool,
+    pub cancelled: bool,
 }
 
 #[contracterror]
@@ -34,8 +35,9 @@ pub enum Error {
     InvalidAmount = 2,
     CreatorNotFound = 3,
     LedgerOverflow = 4,
-    Unauthorized = 5,
-    UserNotFound = 6,
+    PayLinkNotFound = 5,
+    NotPayLinkCreator = 6,
+    PayLinkAlreadyPaid = 7,
 }
 
 #[contract]
@@ -130,6 +132,7 @@ impl PayLinkContract {
             note,
             expiration_ledger,
             paid: false,
+            cancelled: false,
         };
 
         env.storage().persistent().set(&paylink_key, &data);
@@ -144,6 +147,39 @@ impl PayLinkContract {
         env.events().publish(
             (Symbol::new(&env, "paylink_created"),),
             (creator_username, token_id, amount, expiration_ledger),
+        );
+
+        Ok(())
+    }
+
+    pub fn cancel_paylink(
+        env: Env,
+        requester_username: String,
+        token_id: String,
+    ) -> Result<(), Error> {
+        env.current_contract_address().require_auth();
+
+        let paylink_key = DataKey::PayLink(token_id.clone());
+        let mut paylink = env
+            .storage()
+            .persistent()
+            .get::<_, PayLinkData>(&paylink_key)
+            .ok_or(Error::PayLinkNotFound)?;
+
+        if requester_username != paylink.creator_username {
+            return Err(Error::NotPayLinkCreator);
+        }
+
+        if paylink.paid {
+            return Err(Error::PayLinkAlreadyPaid);
+        }
+
+        paylink.cancelled = true;
+        env.storage().persistent().set(&paylink_key, &paylink);
+
+        env.events().publish(
+            (Symbol::new(&env, "paylink_cancelled"),),
+            (requester_username, token_id),
         );
 
         Ok(())
@@ -182,6 +218,7 @@ mod test {
         assert_eq!(stored.note, note);
         assert_eq!(stored.expiration_ledger, 150);
         assert!(!stored.paid);
+        assert!(!stored.cancelled);
     }
 
     #[test]
@@ -221,67 +258,75 @@ mod test {
         );
     }
 
-    fn setup_with_admin(env: &Env) -> (PayLinkContractClient, Address) {
+    #[test]
+    fn cancel_paylink_marks_link_cancelled() {
+        let env = Env::default();
+        env.mock_all_auths();
+
         let contract_id = env.register_contract(None, PayLinkContract);
-        let client = PayLinkContractClient::new(env, &contract_id);
-        let admin = Address::generate(env);
-        client.set_admin(&admin);
-        (client, admin)
+        let client = PayLinkContractClient::new(&env, &contract_id);
+
+        let creator = String::from_str(&env, "dave");
+        let token_id = String::from_str(&env, "tok-cancel");
+        let note = String::from_str(&env, "lunch");
+
+        client.register_creator(&creator);
+        client.create_paylink(&creator, &token_id, &25_i128, &note, &20);
+
+        client.cancel_paylink(&creator, &token_id);
+
+        let stored = client.get_paylink(&token_id).expect("expected PayLink in storage");
+        assert!(stored.cancelled);
+        assert_eq!(stored.creator_username, creator);
+        assert!(!stored.paid);
     }
 
     #[test]
-    fn credit_yield_to_existing_staker_accumulates_balance() {
+    fn cancel_paylink_by_non_creator_returns_not_paylink_creator() {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _admin) = setup_with_admin(&env);
 
-        let user = String::from_str(&env, "alice");
-        client.register_creator(&user);
+        let contract_id = env.register_contract(None, PayLinkContract);
+        let client = PayLinkContractClient::new(&env, &contract_id);
 
-        client.credit_yield(&user, &500_i128);
-        client.credit_yield(&user, &300_i128);
+        let creator = String::from_str(&env, "erin");
+        let other_user = String::from_str(&env, "frank");
+        let token_id = String::from_str(&env, "tok-wrong-user");
+        let note = String::from_str(&env, "gift");
 
-        // Verify via a second credit that balance accumulates (event carries new_balance).
-        // We confirm no error is returned and the call succeeds.
+        client.register_creator(&creator);
+        client.create_paylink(&creator, &token_id, &40_i128, &note, &20);
+
+        assert_eq!(
+            client.try_cancel_paylink(&other_user, &token_id),
+            Ok(Err(Error::NotPayLinkCreator))
+        );
     }
 
     #[test]
-    fn credit_yield_to_user_with_zero_stake_succeeds() {
+    fn cancel_paid_paylink_returns_paylink_already_paid() {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, _admin) = setup_with_admin(&env);
 
-        let user = String::from_str(&env, "bob");
-        client.register_creator(&user);
+        let contract_id = env.register_contract(None, PayLinkContract);
+        let client = PayLinkContractClient::new(&env, &contract_id);
 
-        // User has no prior stake — should succeed without error.
-        assert_eq!(client.try_credit_yield(&user, &100_i128), Ok(Ok(())));
-    }
+        let creator = String::from_str(&env, "grace");
+        let token_id = String::from_str(&env, "tok-paid");
+        let note = String::from_str(&env, "rent");
 
-    #[test]
-    fn credit_yield_unauthorized_caller_is_rejected() {
-        use soroban_sdk::testutils::MockAuth;
+        client.register_creator(&creator);
+        client.create_paylink(&creator, &token_id, &75_i128, &note, &20);
 
-        let env = Env::default();
-        env.mock_all_auths();
-        let (client, _admin) = setup_with_admin(&env);
+        let mut stored = client.get_paylink(&token_id).expect("expected PayLink in storage");
+        stored.paid = true;
+        env.storage()
+            .persistent()
+            .set(&DataKey::PayLink(token_id.clone()), &stored);
 
-        let user = String::from_str(&env, "carol");
-        client.register_creator(&user);
-
-        // Provide auth for a *different* address — not the registered admin.
-        let impostor = Address::generate(&env);
-        env.mock_auths(&[MockAuth {
-            address: &impostor,
-            invoke: &soroban_sdk::testutils::MockAuthInvoke {
-                contract: &client.address,
-                fn_name: "credit_yield",
-                args: (user.clone(), 100_i128).into_val(&env),
-            },
-        }]);
-
-        // require_auth on the real admin will fail because only impostor signed.
-        let result = client.try_credit_yield(&user, &100_i128);
-        assert!(result.is_err(), "expected auth failure");
+        assert_eq!(
+            client.try_cancel_paylink(&creator, &token_id),
+            Ok(Err(Error::PayLinkAlreadyPaid))
+        );
     }
 }
