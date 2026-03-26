@@ -20,6 +20,7 @@ import { LoggingModule } from './logging/logging.module';
 import { CorrelationIdMiddleware } from './logging/correlation-id.middleware';
 import { HttpLoggingInterceptor } from './logging/http-logging.interceptor';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { RbacModule } from './rbac/rbac.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { UsersModule } from './users/users.module';
 import { BankAccountsModule } from './bank-accounts/bank-accounts.module';
@@ -86,6 +87,8 @@ import { AdminModule } from './admin/admin.module';
     // 8. Webhooks — subscriptions + signed deliveries + retries.
     WebhooksModule,
 
+    // 9. RBAC — roles + permissions for admin routes.
+    RbacModule,
     MerchantsModule,
 
     UsersModule,

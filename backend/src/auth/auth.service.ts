@@ -22,6 +22,7 @@ import type { TokenResponseDto } from './dto/token-response.dto';
 export interface JwtPayload {
   sub: string;
   username: string;
+  role: 'user' | 'merchant' | 'admin' | 'super_admin';
   role: 'admin' | 'merchant' | 'user';
   sessionId: string;
 }
@@ -154,6 +155,9 @@ export class AuthService {
     ipAddress?: string,
     deviceInfo?: Record<string, unknown>,
   ): Promise<TokenResponseDto> {
+    const role =
+      (user as any).role ??
+      (user.isAdmin ? ('admin' as const) : ('user' as const));
     const role: JwtPayload['role'] = user.isAdmin
       ? 'admin'
       : user.role === UserRole.MERCHANT
