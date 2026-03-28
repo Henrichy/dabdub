@@ -5,6 +5,7 @@ import type { AppConfig } from './app.config';
 import type { DatabaseConfig } from './database.config';
 import type { RedisConfig } from './redis.config';
 import type { JwtConfig } from './jwt.config';
+import type { QueueConfig } from './queue.config';
 
 /** Minimal valid env that satisfies every required field. */
 const VALID_ENV: NodeJS.ProcessEnv = {
@@ -23,6 +24,8 @@ const VALID_ENV: NodeJS.ProcessEnv = {
 
   REDIS_HOST: 'localhost',
   REDIS_PORT: '6379',
+  BULL_BOARD_USERNAME: 'queue-admin',
+  BULL_BOARD_PASSWORD: 'queue-password',
 
   JWT_ACCESS_SECRET: 'access-secret-that-is-at-least-32-chars!!',
   JWT_REFRESH_SECRET: 'refresh-secret-that-is-at-least-32-chars!',
@@ -109,6 +112,15 @@ describe('AppConfigModule', () => {
     expect(
       config.get<RedisConfig['password']>('redis.password'),
     ).toBeUndefined();
+  });
+
+  it('returns correct typed QueueConfig values', () => {
+    expect(
+      config.get<QueueConfig['bullBoardUsername']>('queue.bullBoardUsername'),
+    ).toBe('queue-admin');
+    expect(
+      config.get<QueueConfig['bullBoardPassword']>('queue.bullBoardPassword'),
+    ).toBe('queue-password');
   });
 
   it('exposes optional REDIS_PASSWORD when provided', async () => {

@@ -1,12 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { AppModule } from './app.module';
 import type { AppConfig } from './config';
+import { QueueBoardService } from './queue/queue.board';
+import { createBullBoardBasicAuth } from './queue/queue.basic-auth';
+import { BULL_BOARD_PATH } from './queue/queue.constants';
 import {
   API_VERSION_POLICY,
   DOCUMENTED_API_VERSIONS,
@@ -49,6 +53,7 @@ function scrubPII(obj: unknown): unknown {
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
   
   // Initialize Sentry before app bootstrap
   const sentryDsn = process.env.SENTRY_DSN;
@@ -117,6 +122,14 @@ async function bootstrap(): Promise<void> {
     type: VersioningType.URI,
   });
 
+  const queueBoard = app.get(QueueBoardService);
+  const credentials = queueBoard.getCredentials();
+  app.use(
+    BULL_BOARD_PATH,
+    createBullBoardBasicAuth(credentials.username, credentials.password),
+    queueBoard.getRouter(),
+  );
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -160,4 +173,4 @@ async function bootstrap(): Promise<void> {
   logger.log(`Application running on http://localhost:${port}/${apiPrefix}`);
 }
 
-bootstrap();
+void bootstrap();

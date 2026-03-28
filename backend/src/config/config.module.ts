@@ -8,6 +8,7 @@ import { jwtConfig } from './jwt.config';
 import { stellarConfig } from './stellar.config';
 import { zeptoConfig } from './zepto.config';
 import { r2Config } from './r2.config';
+import { queueConfig } from './queue.config';
 import { flutterwaveConfig } from './flutterwave.config';
 import { paystackConfig } from './paystack.config';
 import { firebaseConfig } from './firebase.config';
@@ -56,6 +57,14 @@ const validationSchema = Joi.object({
     .messages({ 'any.required': 'REDIS_HOST is required' }),
   REDIS_PORT: Joi.number().integer().positive().default(6379),
   REDIS_PASSWORD: Joi.string().allow('').optional(),
+  BULL_BOARD_USERNAME: Joi.string()
+    .min(1)
+    .required()
+    .messages({ 'any.required': 'BULL_BOARD_USERNAME is required' }),
+  BULL_BOARD_PASSWORD: Joi.string()
+    .min(1)
+    .required()
+    .messages({ 'any.required': 'BULL_BOARD_PASSWORD is required' }),
 
   // ── JWT ──────────────────────────────────────────────────────────────────
   JWT_ACCESS_SECRET: Joi.string().min(32).required().messages({
@@ -182,6 +191,7 @@ const validationSchema = Joi.object({
         stellarConfig,
         zeptoConfig,
         r2Config,
+        queueConfig,
         flutterwaveConfig,
         paystackConfig,
         firebaseConfig,

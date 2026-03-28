@@ -15,6 +15,7 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { UploadModule } from './uploads/upload.module';
 import { WsModule } from './ws/ws.module';
+import { QueueModule } from './queue/queue.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { LoggingModule } from './logging/logging.module';
 import { CorrelationIdMiddleware } from './logging/correlation-id.middleware';
@@ -103,6 +104,8 @@ import { ComplianceModule } from './compliance/compliance.module';
         ],
       }),
     }),
+
+    QueueModule,
 
     HealthModule,
     ApiVersionModule,
@@ -215,6 +218,7 @@ import { ComplianceModule } from './compliance/compliance.module';
     },
   ],
 })
+export class AppModule {}
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(CorrelationIdMiddleware).forRoutes('*');
